@@ -23,7 +23,9 @@ from . import utils
 log = logging.getLogger(__name__)
 
 
-class Signable(object, metaclass=ABCMeta):
+class Signable(object):
+    __metaclass__=ABCMeta
+
     slot_classes = []
 
     def __init__(self, bundle, path, signer):
@@ -69,6 +71,8 @@ class Signable(object, metaclass=ABCMeta):
     def _get_arch(self, macho, arch_offset, arch_size):
         arch = {'macho': macho, 'arch_offset': arch_offset, 'arch_size': arch_size}
 
+        log.debug("_get_arch, arch_size = " + str(arch_size))
+
         arch['cmds'] = {}
         for cmd in macho.commands:
             name = cmd.cmd
@@ -76,13 +80,24 @@ class Signable(object, metaclass=ABCMeta):
 
         codesig_data = None
 
+        for cmd in arch['cmds']:
+            print("CMD = " + str(cmd))
+
         if 'LC_CODE_SIGNATURE' in arch['cmds']:
             arch['lc_codesig'] = arch['cmds']['LC_CODE_SIGNATURE']
             codesig_offset = arch['macho'].macho_start + arch['lc_codesig'].data.dataoff
             self.f.seek(codesig_offset)
             codesig_data = self.f.read(arch['lc_codesig'].data.datasize)
-            # log.debug("codesig len: {0}".format(len(codesig_data)))
-        else:
+            log.debug("codesig len: {0}".format(len(codesig_data)))
+            codesig = Codesig(self, codesig_data)
+            if len(codesig.get_blobs('CSMAGIC_ENTITLEMENT')) == 0:
+                log.debug('Existing LC_CODE_SIGNATURE missing entitlements')
+                codesig = None
+                codesig_data = None
+                self.f.seek(codesig_offset)
+                arch_size = codesig_offset # assuming code signature at end of file
+
+        if codesig == None:
             log.info("signing from scratch!")
             self.sign_from_scratch = True
             entitlements_file = self.bundle.get_entitlements_path()  # '/path/to/some/entitlements.plist'
@@ -111,12 +126,11 @@ class Signable(object, metaclass=ABCMeta):
                                           self.bundle.get_info_prop('CFBundleIdentifier'))
 
             arch['lc_codesig'] = arch['cmds']['LC_CODE_SIGNATURE']
-
-        arch['codesig'] = Codesig(self, codesig_data)
-        arch['codesig_len'] = len(codesig_data)
-
-        if self.sign_from_scratch:
             arch['codesig_data'] = codesig_data
+            codesig = Codesig(self, codesig_data)
+
+        arch['codesig'] = codesig
+        arch['codesig_len'] = len(codesig_data)
 
         return arch
 

@@ -11,7 +11,8 @@ log = logging.getLogger(__name__)
 
 # See the documentation for an explanation of how
 # CodeDirectory slots work.
-class CodeDirectorySlot(object, metaclass=ABCMeta):
+class CodeDirectorySlot(object):
+    __metaclass__=ABCMeta
     offset = None
 
     def __init__(self, codesig):
@@ -36,7 +37,10 @@ class ApplicationSlot(CodeDirectorySlot):
     offset = -4
 
     def get_hash(self, hash_algorithm):
-        return '\x00' * 20
+        if hash_algorithm == "sha1":
+            return '\x00' * 20
+        elif hash_algorithm == "sha256":
+            return '\x00' * 32
 
 
 class ResourceDirSlot(CodeDirectorySlot):
@@ -140,6 +144,9 @@ class Codesig(object):
 
         signer_cn = signer.get_common_name()
 
+        if len(requirements.data.BlobIndex) < 1:
+            return
+
         # this is for convenience, a reference to the first blob
         # structure within requirements, which contains the data
         # we are going to change
@@ -211,8 +218,12 @@ class Codesig(object):
         changed_bundle_id = self.signable.get_changed_bundle_id()
 
         for i, code_directory in enumerate(cd):
+            if code_directory.data.hashType == 1:
+                hash_algorithm = 'sha1'
+            else:
+                hash_algorithm = 'sha256'
             # TODO: Is there a better way to figure out which hashing algorithm we should use?
-            hash_algorithm = 'sha256' if i > 0 else 'sha1'
+            #hash_algorithm = 'sha256' if i > 0 else 'sha1'
 
             if self.has_codedirectory_slot(EntitlementsSlot, code_directory):
                 self.fill_codedirectory_slot(EntitlementsSlot(self), code_directory, hash_algorithm)

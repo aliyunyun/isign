@@ -16,7 +16,7 @@ import os
 import os.path
 import subprocess
 import re
-from isign.utils import decode_dict
+from .utils import decode_dict
 
 OPENSSL = os.getenv('OPENSSL', spawn.find_executable('openssl', os.getenv('PATH', '')))
 # modern OpenSSL versions look like '0.9.8zd'. Use a regex to parse

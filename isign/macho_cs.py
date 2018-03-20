@@ -7,16 +7,17 @@
 
 
 from construct import *
-import plistlib
+import biplist
+from .utils import decode_dict
 
 
 class PlistAdapter(Adapter):
     def _encode(self, obj, context):
-        return plistlib.dumps(obj)
-
+        return biplist.writePlistToString(obj)
 
     def _decode(self, obj, context):
-        return plistlib.dumps(obj)
+        blist = biplist.readPlistFromString(obj)
+        return decode_dict(blist)
 
 
 # talk about overdesign.

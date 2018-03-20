@@ -13,28 +13,39 @@ TEMPLATE_FILENAME = 'code_resources_template.xml'
 # DIGEST_ALGORITHM = "sha1"
 HASH_BLOCKSIZE = 65536
 
+# We don't maintain these rules in code_resources_template.xml because they
+# are ordered and we can't rely on our plist parser to maintain the order.
+_rules = [
+    ( '^', True ),
+    ( '^.*\\.lproj/', {'optional': True, 'weight': 1000.0} ),
+    ( '^.*\\.lproj/locversion.plist$', {'omit': True, 'weight': 1100.0} ),
+    ( '^Base\\.lproj/', {'weight': 1010.0}, ),
+    ( '^version.plist$', True ),
+]
+_rules2 = [
+    ( '.*\\.dSYM($|/)', {'weight': 11.0} ),
+    ( '^', {'weight': 20.0} ),
+    ( '^(.*/)?\\.DS_Store$', {'omit': True, 'weight': 2000.0} ),
+    ( '^(Frameworks|SharedFrameworks|PlugIns|Plug-ins|XPCServices|Helpers|MacOS|Library/(Automator|Spotlight|LoginItems))/', {'nested': True, 'weight': 10.0} ),
+    ( '^.*', True),
+    ( '^.*\\.lproj/', {'optional': True, 'weight': 1000.0} ),
+    ( '^.*\\.lproj/locversion.plist$', {'omit': True, 'weight': 1100.0} ),
+    ( '^Base\\.lproj/', {'weight': 1010.0} ),
+    ( '^Info\\.plist$', {'omit': True, 'weight': 20.0} ),
+    ( '^PkgInfo$', {'omit': True, 'weight': 20.0} ),
+    ( '^[^/]+$', {'nested': True, 'weight': 10.0} ),
+    ( '^embedded\\.provisionprofile$', {'weight': 20.0} ),
+    ( '^version\\.plist$', {'weight': 20.0} ),
+]
+
 log = logging.getLogger(__name__)
 
 
-# have to monkey patch Plist, in order to make the values
-# look the same - no .0 for floats
-# Apple's plist utils work like this:
-#   1234.5 --->  <real>1234.5</real>
-#   1234.0 --->  <real>1234</real>
-
-"""
-def writeValue(self, value):
-    if isinstance(value, float):
-        rep = repr(value)
-        if value.is_integer():
-            rep = repr(int(value))
-        self.simpleElement("real", rep)
-    else:
-        self.oldWriteValue(value)
-
-PlistWriter.oldWriteValue = PlistWriter.writeValue
-PlistWriter.writeValue = writeValue
-"""
+def rules_to_dict(rules):
+    ret = {}
+    for pattern, properties in rules:
+        ret[pattern] = properties
+    return ret
 
 
 # Simple reimplementation of ResourceBuilder, in the Apple Open Source
@@ -89,29 +100,29 @@ class PathRule(object):
     def __str__(self):
         return 'PathRule:' + str(self.flags) + ':' + str(self.weight)
 
-
 class ResourceBuilder(object):
     NULL_PATH_RULE = PathRule()
 
-    def __init__(self, app_path, rules_data, respect_omissions=False, include_sha256=False):
+    def __init__(self, app_path, rules, respect_omissions=False, include_sha256=False):
         self.app_path = app_path
         self.app_dir = os.path.dirname(app_path)
         self.rules = []
         self.respect_omissions = respect_omissions
         self.include_sha256 = include_sha256
-        for pattern, properties in rules_data.items():
+        for pattern, properties in rules:
             self.rules.append(PathRule(pattern, properties))
 
     def find_rule(self, path):
         best_rule = ResourceBuilder.NULL_PATH_RULE
         for rule in self.rules:
-            # log.debug('trying rule ' + str(rule) + ' against ' + path)
+            log.debug('trying rule (' + str(rule.pattern.pattern) + ') w=' + str(rule.weight) + ' best w=' + str(best_rule.weight) + ' against ' + path)
             if rule.matches(path):
                 if rule.flags and rule.is_exclusion():
                     best_rule = rule
                     break
                 elif rule.weight >= best_rule.weight:
                     best_rule = rule
+        log.debug('best rule = ' + str(rule) + ' (' + str(rule.pattern.pattern) + ') against ' + path)
         return best_rule
 
     def get_rule_and_paths(self, root, path):
@@ -238,14 +249,15 @@ def make_seal(source_app_path, target_dir=None):
     if target_dir is None:
         target_dir = os.path.dirname(source_app_path)
     template = get_template()
+    print("template = " + str(template))
     # n.b. code_resources_template not only contains a template of
     # what the file should look like; it contains default rules
     # deciding which files should be part of the seal
-    rules = template['rules']
     plist = copy.deepcopy(template)
-    resource_builder = ResourceBuilder(source_app_path, rules, respect_omissions=False)
+    resource_builder = ResourceBuilder(source_app_path, _rules, respect_omissions=False)
     plist['files'] = resource_builder.scan()
-    rules2 = template['rules2']
-    resource_builder2 = ResourceBuilder(source_app_path, rules2, respect_omissions=True, include_sha256=True)
+    plist['rules'] = rules_to_dict(_rules)
+    resource_builder2 = ResourceBuilder(source_app_path, _rules2, respect_omissions=True, include_sha256=True)
     plist['files2'] = resource_builder2.scan()
+    plist['rules2'] = rules_to_dict(_rules2)
     return write_plist(target_dir, plist)

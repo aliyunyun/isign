@@ -9,6 +9,7 @@
 
     See the Apple Developer Documentation "About Bundles" """
 
+import biplist
 import plistlib
 from . import code_resources
 from .exceptions import NotMatched
@@ -21,6 +22,7 @@ from os.path import basename, exists, join, splitext
 from .signer import openssl_command
 from . import signable
 import shutil
+from .utils import decode_dict
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +54,9 @@ class Bundle(object):
         self.info_path = join(self.path, 'Info.plist')
         if not exists(self.info_path):
             raise NotMatched("no Info.plist found; probably not a bundle")
-        self.info = plistlib.readPlist(self.info_path)
+        log.debug('info path = ' + self.info_path)
+        self.info = biplist.readPlist(self.info_path)
+        self.info = decode_dict(self.info)
         self.orig_info = None
         if not is_info_plist_native(self.info):
             # while we should probably not allow this *or* add it ourselves, it appears to work without it

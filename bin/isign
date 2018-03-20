@@ -4,6 +4,7 @@ import argparse
 from isign import isign
 from os.path import abspath, expanduser
 import logging
+from isign import archive
 
 FORMATTER = logging.Formatter('%(message)s')
 
@@ -175,6 +176,7 @@ if __name__ == '__main__':
         import json
         bundle_info = isign.view(args.app_paths[0])
         print((json.dumps(bundle_info, indent=4, separators=(',', ': '))))
+        archive = archive.AppArchive(args.app_paths[0])
     else:
         # Handle the various kinds of resign operations
         kwargs = {}
